@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Impostor Word Game - Multiplayer</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; display:flex; justify-content:center; align-items:center; color:#fff;
+        }
+        .container { max-width:600px; width:90%; background:rgba(255,255,255,.15); backdrop-filter: blur(10px);
+            border-radius:20px; padding:2rem; box-shadow:0 8px 32px rgba(31,38,135,.37);
+            border:1px solid rgba(255,255,255,.18); text-align:center; transition:all .3s ease; }
+        .container.shake { animation: shake .5s ease-in-out; }
+        @keyframes shake {
+            0%,100%{transform:translateX(0)} 10%,30%,50%,70%,90%{transform:translateX(-10px)}
+            20%,40%,60%,80%{transform:translateX(10px)}
+        }
+        h1 { font-size:2.5rem; margin-bottom:.5rem; text-shadow:2px 2px 4px rgba(0,0,0,.3); }
+        .subtitle { font-size:1.2rem; opacity:.9; margin-bottom:2rem; }
+        .screen { display:none; animation: slideInUp .5s cubic-bezier(.175,.885,.32,1.275); }
+        .screen.active { display:block; }
+        .screen.slide-out { animation: slideOutDown .3s ease-in-out forwards; }
+        @keyframes slideInUp { from{opacity:0; transform:translateY(50px) scale(.9)} to{opacity:1; transform:translateY(0) scale(1)} }
+        @keyframes slideOutDown { from{opacity:1; transform:translateY(0) scale(1)} to{opacity:0; transform:translateY(-30px) scale(.95)} }
+        .input-group { margin-bottom:1.5rem; }
+        label { display:block; margin-bottom:.5rem; font-weight:600; }
+        input[type="text"], input[type="number"] {
+            width:100%; padding:1rem; border:none; border-radius:10px; font-size:1.1rem;
+            background:rgba(255,255,255,.9); color:#333; transition:all .3s ease; text-align:center;
+        }
+        input[type="text"]:focus, input[type="number"]:focus {
+            outline:none; box-shadow:0 0 0 3px rgba(255,255,255,.3); transform:scale(1.02);
+        }
+        .btn {
+            background: linear-gradient(135deg,#ff6b6b,#ee5a24); color:#fff; border:none; padding:1rem 2rem;
+            border-radius:10px; font-size:1.1rem; font-weight:600; cursor:pointer; transition:all .3s ease;
+            margin:.5rem; min-width:120px; position:relative; overflow:hidden;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow:0 10px 25px rgba(0,0,0,.2); }
+        .btn:active { transform: translateY(0) scale(.95); }
+        .btn:disabled { opacity:.6; cursor:not-allowed; transform:none; }
+        .btn-primary { background: linear-gradient(135deg,#4facfe,#00f2fe); }
+        .btn-success { background: linear-gradient(135deg,#43e97b,#38f9d7); }
+        .btn-warning { background: linear-gradient(135deg,#fa709a,#fee140); }
+        .room-code {
+            font-size:3rem; font-weight:bold; letter-spacing:.2em;
+            background: linear-gradient(135deg,#43e97b,#38f9d7);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
+            margin:1rem 0; text-shadow:none;
+        }
+        .player-list { background:rgba(255,255,255,.1); border-radius:15px; padding:1.5rem; margin:1rem 0; max-height:300px; overflow-y:auto; }
+        .player-item { display:flex; align-items:center; justify-content:space-between; margin-bottom:.8rem; padding:.8rem;
+            background:rgba(255,255,255,.1); border-radius:10px; transition:all .3s ease; }
+        .player-item.host { background:linear-gradient(135deg,rgba(255,215,0,.3),rgba(255,165,0,.3)); border:2px solid rgba(255,215,0,.5); }
+        .player-name { display:flex; align-items:center; gap:.5rem; }
+        .player-status { font-size:.9rem; opacity:.8; }
+        .status-indicator { width:10px; height:10px; border-radius:50%; background:#43e97b; display:inline-block; margin-right:.5rem; }
+        .status-indicator.disconnected { background:#ff6b6b; }
+        .role-card {
+            background:rgba(255,255,255,.1); border-radius:15px; padding:2rem; margin:2rem 0; font-size:1.5rem; font-weight:bold;
+            min-height:200px; display:flex; flex-direction:column; justify-content:center; align-items:center;
+            transition: all .8s cubic-bezier(.175,.885,.32,1.275);
+        }
+        .role-card.impostor { background: linear-gradient(135deg,#ff6b6b,#ee5a24); animation: pulse 2s infinite; }
+        .role-card.innocent { background: linear-gradient(135deg,#43e97b,#38f9d7); }
+        @keyframes pulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.02)} }
+        .word-display { font-size:3rem; text-shadow:2px 2px 4px rgba(0,0,0,.3); margin:1rem 0; }
+        .connection-status {
+            position:fixed; top:20px; right:20px; background:rgba(0,0,0,.7); color:#fff; padding:.5rem 1rem; border-radius:20px; font-size:.9rem; z-index:1000;
+        }
+        .connection-status.connected { background: rgba(67,233,123,.8); }
+        .connection-status.disconnected { background: rgba(255,107,107,.8); }
+        .loading { display:inline-block; width:20px; height:20px; border:3px solid rgba(255,255,255,.3); border-radius:50%; border-top-color:#fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        /* Game in progress animation */
+        .game-progress {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            animation: gameProgressPulse 3s ease-in-out infinite;
+        }
+        
+        .progress-dots {
+            display: flex;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .progress-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #4facfe;
+            animation: dotBounce 1.5s ease-in-out infinite;
+        }
+        
+        .progress-dot:nth-child(1) { animation-delay: 0s; }
+        .progress-dot:nth-child(2) { animation-delay: 0.2s; }
+        .progress-dot:nth-child(3) { animation-delay: 0.4s; }
+        
+        @keyframes gameProgressPulse {
+            0%, 100% { transform: scale(1); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+        }
+        
+        @keyframes dotBounce {
+            0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
+            40% { transform: scale(1.2); opacity: 1; }
+        }
+        .game-stats { display:flex; justify-content:space-around; margin:2rem 0; flex-wrap:wrap; }
+        .stat-item { background:rgba(255,255,255,.1); border-radius:10px; padding:1rem; margin:.5rem; flex:1; min-width:100px; }
+        .stat-value { font-size:2rem; font-weight:bold; display:block; }
+        .error-message {
+            background:rgba(255,107,107,.2); border:1px solid rgba(255,107,107,.5); border-radius:10px; padding:1rem; margin:1rem 0; color:#ffcccb;
+        }
+        .success-message {
+            background:rgba(67,233,123,.2); border:1px solid rgba(67,233,123,.5); border-radius:10px; padding:1rem; margin:1rem 0; color:#c8f7c8;
+        }
+        .menu-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-top:2rem; }
+        .qr-code-section { display: block; }
+        
+        /* Hide QR codes on mobile devices */
+        @media (max-width: 768px), (hover: none) {
+            .qr-code-section { display: none !important; }
+            #qr-code-section { display: none !important; }
+            #lobby-qr-section { display: none !important; }
+        }
+        
+        @media (max-width:768px){
+            .container{padding:1.5rem} h1{font-size:2rem} .room-code{font-size:2rem} .word-display{font-size:2rem} .menu-grid{grid-template-columns:1fr}
+        }
+    </style>
+    <!-- QR Code Library -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+</head>
+<body>
+    <div class="connection-status" id="connection-status">🔄 Connecting...</div>
+
+    <div class="container">
+        <!-- Main Menu -->
+        <div id="main-menu" class="screen active">
+            <h1>🕵️ Impostor Word Game</h1>
+            <p class="subtitle">Multiplayer Edition</p>
+            <div class="menu-grid">
+                <button class="btn btn-primary" onclick="showHostScreen()">🏠 Host Game</button>
+                <button class="btn btn-success" onclick="showJoinScreen()">🚪 Join Game</button>
+            </div>
+            <div style="margin-top:2rem;">
+                <div id="qr-code-section" style="background:rgba(255,255,255,.1); border-radius:15px; padding:1.5rem; margin:1rem 0;">
+                    <h3>📱 Quick Join with QR Code</h3>
+                    <p style="margin-bottom:1rem; opacity:.9;">Scan to join from your phone:</p>
+                    <div id="qr-code-container" style="background:white; border-radius:10px; padding:1rem; margin:1rem auto; max-width:200px;">
+                        <div id="qr-code" style="text-align:center;"></div>
+                    </div>
+                    <p style="font-size:.9rem; opacity:.7; margin-top:.5rem;">
+                        Or visit: <span id="join-url" style="font-family:monospace;"></span>
+                    </p>
+                </div>
+            </div>
+            <div style="margin-top:1rem; opacity:.7;">
+                <p>Host creates a room, others join with the room code!</p>
+            </div>
+        </div>
+
+        <!-- Host Screen -->
+        <div id="host-screen" class="screen">
+            <h1>🏠 Host a Game</h1>
+            <div class="input-group">
+                <label for="host-name">Your Name:</label>
+                <input type="text" id="host-name" placeholder="Enter your name" maxlength="15">
+            </div>
+            <button class="btn btn-primary" onclick="createRoom()">Create Room</button>
+            <button class="btn" onclick="showMainMenu()">← Back</button>
+        </div>
+
+        <!-- Join Screen -->
+        <div id="join-screen" class="screen">
+            <h1>🚪 Join Game</h1>
+            <div class="input-group">
+                <label for="player-name">Your Name:</label>
+                <input type="text" id="player-name" placeholder="Enter your name" maxlength="15">
+            </div>
+            <div class="input-group">
+                <label for="room-code-input">Room Code:</label>
+                <input type="text" id="room-code-input" placeholder="Enter 4-digit code" maxlength="4" style="text-transform: uppercase;">
+            </div>
+            <button class="btn btn-success" onclick="joinRoom()">Join Room</button>
+            <button class="btn" onclick="showMainMenu()">← Back</button>
+        </div>
+
+        <!-- Lobby Screen -->
+        <div id="lobby-screen" class="screen">
+            <h1>🎮 Game Lobby</h1>
+            <div class="room-code" id="display-room-code">ABCD</div>
+            <p class="subtitle">Share this code with your friends!</p>
+            
+            <!-- QR Code for joining -->
+            <div id="lobby-qr-section" style="background:rgba(255,255,255,.1); border-radius:15px; padding:1rem; margin:1rem 0;">
+                <h4>📱 Scan to Join:</h4>
+                <div style="background:white; border-radius:10px; padding:1rem; margin:1rem auto; max-width:150px;">
+                    <div id="lobby-qr-code" style="text-align:center;"></div>
+                </div>
+            </div>
+            
+            <div class="player-list" id="player-list">
+                <div class="player-item">
+                    <div class="player-name">
+                        <span class="status-indicator"></span>
+                        Loading players...
+                    </div>
+                </div>
+            </div>
+            <div class="game-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="player-count">0</span>
+                    <span>Players</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">3-8</span>
+                    <span>Needed</span>
+                </div>
+            </div>
+            <div id="host-controls" style="display:none;">
+                <button class="btn btn-warning" onclick="startGame()" id="start-btn" disabled>🚀 Start Game</button>
+            </div>
+            <button class="btn" onclick="leaveRoom()">🚪 Leave Room</button>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <h1>🎭 Your Role</h1>
+            <div class="role-card" id="role-card">
+                <div id="role-content">
+                    <div class="loading"></div>
+                    <div>Getting your role...</div>
+                </div>
+            </div>
+            <div class="game-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="game-player-count">0</span>
+                    <span>Players</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">1</span>
+                    <span>Impostor</span>
+                </div>
+            </div>
+            <div id="host-game-controls" style="display:none;">
+                <button class="btn btn-warning" onclick="showResults()">📊 Reveal Results</button>
+            </div>
+        </div>
+
+        <!-- Game Progress Screen -->
+        <div id="game-progress-screen" class="screen">
+            <h1>🎮 Game in Progress</h1>
+            <div class="role-card game-progress">
+                <div>🕵️‍♀️ Players are discussing...</div>
+                <div class="progress-dots">
+                    <div class="progress-dot"></div>
+                    <div class="progress-dot"></div>
+                    <div class="progress-dot"></div>
+                </div>
+                <!-- <div style="font-size: 1.2rem; margin-top: 1rem;">
+                    🤫 The secret word is hidden while players debate
+                </div>
+                <div style="font-size: 1rem; opacity: 0.8; margin-top: 0.5rem;">
+                    Find the impostor through discussion and voting!
+                </div> -->
+            </div>
+            <div class="game-stats">
+                <div class="stat-item">
+                    <span class="stat-value" id="progress-player-count">0</span>
+                    <span>Players</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-value">1</span>
+                    <span>Impostor</span>
+                </div>
+            </div>
+            <div id="host-progress-controls" style="display:none;">
+                <button class="btn btn-warning" onclick="showResults()">📊 Reveal Results</button>
+            </div>
+        </div>
+
+        <!-- Results Screen -->
+        <div id="results-screen" class="screen">
+            <h1>🎭 Game Results</h1>
+            <div class="role-card innocent">
+                <div>🎯 Secret Word:</div>
+                <div class="word-display" id="secret-word-display">LOADING...</div>
+            </div>
+            <div class="role-card impostor">
+                <div>🕵️ The Impostor Was:</div>
+                <div class="word-display" id="impostor-display">LOADING...</div>
+            </div>
+            <div id="host-results-controls" style="display:none;">
+                <button class="btn btn-primary" onclick="newRound()">🔄 New Round</button>
+            </div>
+            <button class="btn" onclick="backToLobby()">🏠 Back to Lobby</button>
+        </div>
+
+        <div id="error-container"></div>
+    </div>
+
+    <script>
+        class MultiplayerImpostorGame {
+            constructor() {
+                this.concepts = [
+                    "Pizza","Hamburger","Sushi","Tacos","Pasta","Sandwich","Coffee","Ice Cream","Chocolate","Apple",
+                    "Dog","Cat","Lion","Tiger","Elephant","Butterfly","Fish","Bird","Horse","Rabbit",
+                    "Ocean","Mountain","River","Forest","Beach","Sunset","Rainbow","Star","Moon","Tree",
+                    "Car","Airplane","Bicycle","Train","Boat","Rocket","Bus","Motorcycle","Helicopter","Ship",
+                    "Phone","Computer","Television","Camera","Clock","Book","Music","Movie","Game","Ball",
+                    "Happy","Excited","Calm","Surprised","Grateful","Curious","Brave","Creative","Friendly","Peaceful",
+                    "Red","Blue","Green","Yellow","Purple","Orange","Pink","Black","White","Gold",
+                    "Summer","Winter","Spring","Fall","Sunny","Rainy","Snowy","Windy","Hot","Cold",
+                    "Teacher","Doctor","Artist","Chef","Pilot","Musician","Writer","Dancer","Athlete","Engineer",
+                    "Home","School","Park","Hospital","Library","Restaurant","Theater","Museum","Castle","Garden"
+                ];
+                this.roomCode = '';
+                this.isHost = false;
+                this.playerName = '';
+                this.players = [];
+                this.gameState = { phase:'lobby', secretWord:'', impostor:'', revealed:false };
+                this.connectionStatus = 'disconnected';
+                this.isMobile = this.detectMobile();
+                this.playerId = localStorage.getItem('playerId') || null;
+
+                this.initializeConnection();
+                this.setupEventListeners();
+                this.generateQRCode();
+            }
+
+            detectMobile() {
+                // Check if device is mobile
+                return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                       window.innerWidth <= 768 ||
+                       ('ontouchstart' in window);
+            }
+
+            initializeConnection() {
+                this.connectToServer();
+                this.networkDelay = () => new Promise(res => setTimeout(res, Math.random()*100 + 50));
+            }
+
+            connectToServer() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                // Try to determine WebSocket port
+                let wsPort = 8765; // default
+                const httpPort = parseInt(window.location.port) || 8080;
+                
+                // Map known HTTP ports to WebSocket ports
+                const portMap = {
+                    8080: 8765,
+                    8081: 8766, 
+                    8082: 8767,
+                    8083: 8768
+                };
+                
+                if (portMap[httpPort]) {
+                    wsPort = portMap[httpPort];
+                } else if (httpPort !== 8080) {
+                    // Fallback: assume WebSocket port is HTTP port + 1
+                    wsPort = httpPort + 1;
+                } else {
+                    // Default case when no port specified (port 80)
+                    wsPort = 8765;
+                }
+                
+                const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}`;
+                console.log('Connecting to WebSocket:', wsUrl);
+                
+                this.updateConnectionStatus('connecting');
+                
+                try {
+                    this.ws = new WebSocket(wsUrl);
+                    
+                    this.ws.onopen = () => {
+                        console.log('Connected to game server');
+                        this.updateConnectionStatus('connected');
+                        
+                        // Auto-join server with stored player info for reconnection
+                        const savedName = localStorage.getItem('playerName') || '';
+                        const savedPlayerId = this.playerId;
+                        
+                        if (savedName) {
+                            document.getElementById('host-name').value = savedName;
+                            document.getElementById('player-name').value = savedName;
+                            
+                            // Auto-reconnect if we have a stored player ID
+                            if (savedPlayerId) {
+                                this.sendMessage({
+                                    type: 'join_server',
+                                    name: savedName,
+                                    playerId: savedPlayerId
+                                });
+                            }
+                        }
+                    };
+                    
+                    this.ws.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            console.log('Received:', data);
+                            this.handleServerMessage(data);
+                        } catch (e) {
+                            console.error('Error parsing server message:', e);
+                        }
+                    };
+                    
+                    this.ws.onclose = () => {
+                        console.log('Disconnected from server');
+                        this.updateConnectionStatus('disconnected');
+                        
+                        // Try to reconnect after 3 seconds
+                        setTimeout(() => {
+                            if (this.connectionStatus === 'disconnected') {
+                                console.log('Attempting to reconnect...');
+                                this.connectToServer();
+                            }
+                        }, 3000);
+                    };
+                    
+                    this.ws.onerror = (error) => {
+                        console.error('WebSocket error:', error);
+                        this.updateConnectionStatus('disconnected');
+                        this.showError(`Connection failed. Trying to connect to ${wsUrl}`);
+                    };
+                    
+                } catch (error) {
+                    console.error('Failed to create WebSocket connection:', error);
+                    this.updateConnectionStatus('disconnected');
+                    this.showError('Cannot connect to game server. Make sure the server is running.');
+                }
+            }
+
+            sendMessage(message) {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.ws.send(JSON.stringify(message));
+                    return true;
+                } else {
+                    this.showError('Not connected to server');
+                    return false;
+                }
+            }
+
+            handleServerMessage(data) {
+                console.log('Server message:', data);
+                
+                switch (data.type) {
+                    case 'connection_established':
+                        this.playerId = data.playerId;
+                        this.playerName = data.name;
+                        localStorage.setItem('playerId', this.playerId);
+                        break;
+                        
+                    case 'reconnection_established':
+                        this.playerId = data.playerId;
+                        this.playerName = data.name;
+                        localStorage.setItem('playerId', this.playerId);
+                        
+                        // If player was in a room, rejoin automatically
+                        if (data.roomCode) {
+                            this.roomCode = data.roomCode;
+                            // Refresh room state
+                            this.sendMessage({ type: 'get_room_state' });
+                        }
+                        this.showSuccess(`Reconnected as ${data.name}!`);
+                        break;
+                        
+                    case 'room_created':
+                        this.roomCode = data.roomCode;
+                        this.isHost = data.isHost || true;
+                        this.players = data.players;
+                        this.updateLobbyDisplay();
+                        this.showScreen('lobby-screen');
+                        this.showSuccess(`Room ${this.roomCode} created! You are the host.`);
+                        break;
+                        
+                    case 'room_joined':
+                        this.roomCode = data.roomCode;
+                        this.isHost = data.isHost || false;
+                        this.players = data.players;
+                        this.updateLobbyDisplay();
+                        this.showScreen('lobby-screen');
+                        this.showSuccess(`Joined room ${this.roomCode}!`);
+                        break;
+                        
+                    case 'join_failed':
+                        this.showError(data.error || 'Failed to join room');
+                        break;
+                        
+                    case 'player_disconnected':
+                    case 'player_reconnected':
+                    case 'player_joined':
+                    case 'player_left':
+                        this.players = data.players;
+                        this.updateLobbyDisplay();
+                        break;
+                        
+                    case 'game_started':
+                    case 'new_round_started':
+                        this.gameState.phase = 'playing';
+                        this.gameState.revealed = false;
+                        document.getElementById('game-player-count').textContent = data.gameState.playerCount.toString();
+                        this.showGameScreen();
+                        break;
+                        
+                    case 'role_assigned':
+                        this.displayRole(data);
+                        break;
+                        
+                    case 'host_status':
+                        this.displayHostStatus(data);
+                        break;
+                        
+                    case 'role_reveal_status':
+                        this.updateRoleRevealStatus(data);
+                        break;
+                        
+                    case 'game_results':
+                        this.gameState.secretWord = data.secretWord;
+                        this.gameState.impostor = data.impostorName;
+                        this.gameState.impostorId = data.impostorId;
+                        this.displayResults();
+                        break;
+                        
+                    case 'error':
+                        this.showError(data.message);
+                        break;
+                }
+            }
+
+            displayRole(data) {
+                const roleCard = document.getElementById('role-card');
+                const roleContent = document.getElementById('role-content');
+                
+                setTimeout(() => {
+                    if (data.isImpostor) {
+                        roleCard.className = 'role-card impostor';
+                        roleContent.innerHTML = `
+                            <div>🔴 Hello ${data.playerName}!</div>
+                            <div class="word-display">IMPOSTOR</div>
+                            <div>Try to blend in without knowing the word!</div>
+                            <button class="btn btn-primary" onclick="revealRole()" style="margin-top: 1rem; background: linear-gradient(135deg,#4facfe,#00f2fe); color: white; font-weight: bold;">✅ I've Seen My Role</button>
+                        `;
+                    } else {
+                        roleCard.className = 'role-card innocent';
+                        roleContent.innerHTML = `
+                            <div>🟢 Hello ${data.playerName}!</div>
+                            <div class="word-display">${data.secretWord.toUpperCase()}</div>
+                            <div>Find the impostor!</div>
+                            <button class="btn btn-primary" onclick="revealRole()" style="margin-top: 1rem; background: linear-gradient(135deg,#4facfe,#00f2fe); color: white; font-weight: bold;">✅ I've Seen My Role</button>
+                        `;
+                    }
+                }, 800);
+            }
+
+            displayHostStatus(data) {
+                const roleCard = document.getElementById('role-card');
+                const roleContent = document.getElementById('role-content');
+                
+                setTimeout(() => {
+                    roleCard.className = 'role-card host';
+                    roleCard.style.background = 'linear-gradient(135deg,#ffd700,#ffb347)';
+                    
+                    // Load random Giphy GIF
+                    this.loadHostGif().then(gifUrl => {
+                        roleContent.innerHTML = `
+                            <div>👑 You are the Host</div>
+                            <div class="word-display">MONITOR GAME</div>
+                            <div style="margin: 1rem 0;">
+                                <img src="${gifUrl}" alt="Secret GIF" style="max-width: 200px; max-height: 150px; border-radius: 10px; object-fit: cover;">
+                            </div>
+                            <div>Watch the players and control the game flow!</div>
+                            <div style="margin-top: 1rem; font-size: 1rem;">
+                                <p>🎯 You can reveal results when ready</p>
+                                <p>🔄 You can start new rounds</p>
+                            </div>
+                        `;
+                    }).catch(() => {
+                        // Fallback if Giphy fails
+                        roleContent.innerHTML = `
+                            <div>👑 You are the Host</div>
+                            <div class="word-display">MONITOR GAME</div>
+                            <div>🤫 Keep the secrets safe!</div>
+                            <div style="margin-top: 1rem; font-size: 1rem;">
+                                <p>🎯 You can reveal results when ready</p>
+                                <p>🔄 You can start new rounds</p>
+                            </div>
+                        `;
+                    });
+                }, 800);
+            }
+
+            async loadHostGif() {
+                try {
+                    // Using Giphy API with public key for "secret" tag
+                    const response = await fetch('https://api.giphy.com/v1/gifs/random?api_key=Gc7131jiJuvI7IdN0HZ1D7nh0ow5BU6g&tag=secret&rating=g');
+                    const data = await response.json();
+                    return data.data.images.fixed_height.url;
+                } catch (error) {
+                    console.error('Failed to load Giphy GIF:', error);
+                    // Return a placeholder or throw to use fallback
+                    throw error;
+                }
+            }
+
+            async loadProgressGif() {
+                try {
+                    // Load a discussion/thinking themed GIF
+                    const response = await fetch('https://api.giphy.com/v1/gifs/random?api_key=Gc7131jiJuvI7IdN0HZ1D7nh0ow5BU6g&tag=thinking+discussion&rating=g');
+                    const data = await response.json();
+                    const gifUrl = data.data.images.fixed_height.url;
+                    
+                    // Add GIF to progress screen
+                    const progressCard = document.querySelector('#game-progress-screen .game-progress');
+                    if (progressCard) {
+                        const existingGif = progressCard.querySelector('.progress-gif');
+                        if (!existingGif) {
+                            const gifDiv = document.createElement('div');
+                            gifDiv.className = 'progress-gif';
+                            gifDiv.style.margin = '1rem 0';
+                            gifDiv.innerHTML = `<img src="${gifUrl}" alt="Discussion GIF" style="max-width: 180px; max-height: 120px; border-radius: 10px; object-fit: cover;">`;
+                            progressCard.appendChild(gifDiv);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to load progress GIF:', error);
+                    // No fallback needed for progress screen
+                }
+            }
+
+            updateRoleRevealStatus(data) {
+                // Update the role reveal status display
+                const roleCard = document.getElementById('role-card');
+                if (data.allReady) {
+                    // All players have seen their roles, show game progress screen
+                    document.getElementById('progress-player-count').textContent = data.totalCount.toString();
+                    
+                    // Show host controls if user is host
+                    const hostProgressControls = document.getElementById('host-progress-controls');
+                    hostProgressControls.style.display = this.isHost ? 'block' : 'none';
+                    
+                    // Switch to game progress screen
+                    setTimeout(() => {
+                        this.showScreen('game-progress-screen');
+                        // Load a fun GIF for the progress screen too
+                        this.loadProgressGif();
+                    }, 1500); // Small delay to show the "all ready" message first
+                    
+                    const statusDiv = document.createElement('div');
+                    statusDiv.style.marginTop = '1rem';
+                    statusDiv.style.padding = '1rem';
+                    statusDiv.style.background = 'rgba(67,233,123,.2)';
+                    statusDiv.style.borderRadius = '10px';
+                    statusDiv.style.border = '1px solid rgba(67,233,123,.5)';
+                    statusDiv.innerHTML = `
+                        <div>🎉 All players have seen their roles!</div>
+                        <div>The game can now begin. Start discussing!</div>
+                    `;
+                    
+                    // Add after role card if not already added
+                    if (!document.getElementById('all-ready-status')) {
+                        statusDiv.id = 'all-ready-status';
+                        roleCard.parentNode.appendChild(statusDiv);
+                    }
+                } else {
+                    // Show waiting status
+                    let statusDiv = document.getElementById('waiting-status');
+                    if (!statusDiv) {
+                        statusDiv = document.createElement('div');
+                        statusDiv.id = 'waiting-status';
+                        statusDiv.style.marginTop = '1rem';
+                        statusDiv.style.padding = '1rem';
+                        statusDiv.style.background = 'rgba(255,255,255,.1)';
+                        statusDiv.style.borderRadius = '10px';
+                        roleCard.parentNode.appendChild(statusDiv);
+                    }
+                    
+                    statusDiv.innerHTML = `
+                        <div>⏳ Waiting for other players...</div>
+                        <div>${data.readyCount}/${data.totalCount} players have seen their roles</div>
+                    `;
+                }
+            }
+
+            displayResults() {
+                document.getElementById('secret-word-display').textContent = (this.gameState.secretWord || '').toUpperCase();
+                document.getElementById('impostor-display').textContent = (this.gameState.impostor || '').toUpperCase();
+
+                const hostResultsControls = document.getElementById('host-results-controls');
+                hostResultsControls.style.display = this.isHost ? 'block' : 'none';
+
+                this.showScreen('results-screen');
+            }
+
+            setupEventListeners() {
+                const roomCodeInput = document.getElementById('room-code-input');
+                if (roomCodeInput) {
+                    roomCodeInput.addEventListener('input', (e) => {
+                        e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    });
+                }
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        const activeScreen = document.querySelector('.screen.active');
+                        const primaryBtn = activeScreen?.querySelector('.btn-primary, .btn-success');
+                        if (primaryBtn && !primaryBtn.disabled) primaryBtn.click();
+                    }
+                });
+            }
+
+            updateConnectionStatus(status) {
+                this.connectionStatus = status;
+                const el = document.getElementById('connection-status');
+                el.className = `connection-status ${status}`;
+                if (status === 'connected') el.textContent = '🟢 Connected';
+                else if (status === 'connecting') el.textContent = '🔄 Connecting...';
+                else el.textContent = '🔴 Disconnected';
+            }
+
+            generateRoomCode() {
+                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+                let out = '';
+                for (let i=0;i<4;i++) out += chars.charAt(Math.floor(Math.random()*chars.length));
+                return out;
+            }
+
+            async createRoom() {
+                const hostName = document.getElementById('host-name').value.trim();
+                if (!hostName) return this.showError('Please enter your name');
+
+                // Save name for next time
+                localStorage.setItem('playerName', hostName);
+                
+                this.updateConnectionStatus('connecting');
+                
+                if (!this.sendMessage({
+                    type: 'join_server',
+                    name: hostName,
+                    playerId: this.playerId
+                })) return;
+                
+                // Wait a moment for connection to establish
+                await this.networkDelay();
+                
+                if (!this.sendMessage({
+                    type: 'create_room'
+                })) return;
+            }
+
+            async joinRoom() {
+                const playerName = document.getElementById('player-name').value.trim();
+                const roomCode = document.getElementById('room-code-input').value.trim();
+                if (!playerName || !roomCode) return this.showError('Please enter both your name and room code');
+                if (roomCode.length !== 4) return this.showError('Room code must be 4 characters');
+
+                // Save name for next time
+                localStorage.setItem('playerName', playerName);
+                
+                this.updateConnectionStatus('connecting');
+                
+                if (!this.sendMessage({
+                    type: 'join_server',
+                    name: playerName,
+                    playerId: this.playerId
+                })) return;
+                
+                // Wait a moment for connection to establish
+                await this.networkDelay();
+                
+                if (!this.sendMessage({
+                    type: 'join_room',
+                    roomCode: roomCode.toUpperCase()
+                })) return;
+            }
+
+            updateLobbyDisplay() {
+                document.getElementById('display-room-code').textContent = this.roomCode || '----';
+                document.getElementById('player-count').textContent = this.players.length.toString();
+
+                // Generate QR code for the lobby with room code (skip on mobile)
+                if (!this.isMobile) {
+                    const gameUrl = window.location.origin + window.location.pathname + '?room=' + this.roomCode;
+                    
+                    const generateLobbyQR = () => {
+                        const qrContainer = document.getElementById('lobby-qr-code');
+                        qrContainer.innerHTML = '';
+                        
+                        if (typeof QRCode !== 'undefined') {
+                            // Create canvas element
+                            const canvas = document.createElement('canvas');
+                            qrContainer.appendChild(canvas);
+                            
+                            QRCode.toCanvas(canvas, gameUrl, {
+                                width: 120,
+                                margin: 1,
+                                color: {
+                                    dark: '#333333',
+                                    light: '#FFFFFF'
+                                }
+                            }, function (error) {
+                                if (error) {
+                                    console.error('Lobby QR Code generation failed:', error);
+                                    // Fallback to API-based QR code
+                                    qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(gameUrl)}" alt="QR Code" style="border-radius:5px;">`;
+                                }
+                            });
+                        } else {
+                            // Library not loaded, use API fallback
+                            qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(gameUrl)}" alt="QR Code" style="border-radius:5px;">`;
+                        }
+                    };
+                    
+                    generateLobbyQR();
+                } else {
+                    // Hide QR section on mobile
+                    const lobbyQrSection = document.getElementById('lobby-qr-section');
+                    if (lobbyQrSection) lobbyQrSection.style.display = 'none';
+                }
+
+                const list = document.getElementById('player-list');
+                list.innerHTML = '';
+                
+                // Show host info if user is the host
+                if (this.isHost) {
+                    const hostItem = document.createElement('div');
+                    hostItem.className = 'player-item host';
+                    hostItem.innerHTML = `
+                        <div class="player-name">
+                            <span class="status-indicator"></span>
+                            👑 You (Host - Not Playing)
+                        </div>
+                        <div class="player-status">Monitoring</div>
+                    `;
+                    list.appendChild(hostItem);
+                }
+                
+                this.players.forEach(p => {
+                    const item = document.createElement('div');
+                    item.className = 'player-item';
+                    item.innerHTML = `
+                        <div class="player-name">
+                            <span class="status-indicator ${p.connected ? '' : 'disconnected'}"></span>
+                            ${p.name}
+                        </div>
+                        <div class="player-status">${p.connected ? (p.ready ? 'Ready' : 'Connected') : 'Disconnected'}</div>
+                    `;
+                    list.appendChild(item);
+                });
+
+                const hostControls = document.getElementById('host-controls');
+                const startBtn = document.getElementById('start-btn');
+                if (this.isHost) {
+                    hostControls.style.display = 'block';
+                    const canStart = this.players.length >= 3 && this.players.length <= 8;
+                    startBtn.disabled = !canStart;
+                    if (canStart) startBtn.textContent = '🚀 Start Game';
+                    else {
+                        const need = Math.max(0, 3 - this.players.length);
+                        startBtn.textContent = need > 0 ? `Need ${need} more player${need>1?'s':''}` : 'Players limit 8';
+                    }
+                } else {
+                    hostControls.style.display = 'none';
+                }
+            }
+
+            async startGame() {
+                if (!this.isHost) return;
+                
+                if (!this.sendMessage({
+                    type: 'start_game'
+                })) return;
+            }
+
+            showGameScreen() {
+                const roleCard = document.getElementById('role-card');
+                const roleContent = document.getElementById('role-content');
+                
+                // Reset role card
+                roleCard.className = 'role-card';
+                roleContent.innerHTML = `
+                    <div class="loading"></div>
+                    <div>Getting your role...</div>
+                `;
+
+                // Remove any existing status divs
+                const existingStatus = document.querySelectorAll('#waiting-status, #all-ready-status');
+                existingStatus.forEach(el => el.remove());
+
+                // Show/hide host controls based on host status
+                const hostGameControls = document.getElementById('host-game-controls');
+                hostGameControls.style.display = this.isHost ? 'block' : 'none';
+
+                this.showScreen('game-screen');
+                
+                // Request role from server
+                this.sendMessage({
+                    type: 'get_role'
+                });
+            }
+
+            async showResults() {
+                if (!this.sendMessage({
+                    type: 'show_results'
+                })) return;
+            }
+
+            async newRound() {
+                if (!this.isHost) return;
+                
+                if (!this.sendMessage({
+                    type: 'new_round'
+                })) return;
+            }
+
+            leaveRoom() {
+                this.sendMessage({
+                    type: 'leave_room'
+                });
+                
+                this.roomCode = '';
+                this.isHost = false;
+                this.playerName = '';
+                this.players = [];
+                this.gameState = { phase:'lobby', secretWord:'', impostor:'', revealed:false };
+                document.getElementById('host-name').value = '';
+                document.getElementById('player-name').value = '';
+                document.getElementById('room-code-input').value = '';
+                this.showScreen('main-menu');
+            }
+
+            showScreen(screenId) {
+                const current = document.querySelector('.screen.active');
+                if (current) {
+                    current.classList.add('slide-out');
+                    setTimeout(() => {
+                        current.classList.remove('active','slide-out');
+                        document.getElementById(screenId).classList.add('active');
+                    }, 300);
+                } else {
+                    document.getElementById(screenId).classList.add('active');
+                }
+                this.clearMessages();
+            }
+
+            showError(message) {
+                this.clearMessages();
+                const div = document.createElement('div');
+                div.className = 'error-message';
+                div.textContent = message;
+                document.getElementById('error-container').appendChild(div);
+                setTimeout(() => div.remove(), 5000);
+            }
+
+            showSuccess(message) {
+                this.clearMessages();
+                const div = document.createElement('div');
+                div.className = 'success-message';
+                div.textContent = message;
+                document.getElementById('error-container').appendChild(div);
+                setTimeout(() => div.remove(), 3000);
+            }
+
+            clearMessages() {
+                document.getElementById('error-container').innerHTML = '';
+            }
+
+            generateQRCode() {
+                // Skip QR code generation on mobile devices
+                if (this.isMobile) {
+                    const qrSection = document.getElementById('qr-code-section');
+                    if (qrSection) qrSection.style.display = 'none';
+                    return;
+                }
+                
+                // Generate QR code for the current URL
+                const gameUrl = window.location.href;
+                document.getElementById('join-url').textContent = gameUrl;
+                
+                // Wait for QRCode library to load, then generate QR code
+                const generateQR = () => {
+                    if (typeof QRCode !== 'undefined') {
+                        // Clear existing content
+                        const qrContainer = document.getElementById('qr-code');
+                        qrContainer.innerHTML = '';
+                        
+                        // Create canvas element
+                        const canvas = document.createElement('canvas');
+                        qrContainer.appendChild(canvas);
+                        
+                        QRCode.toCanvas(canvas, gameUrl, {
+                            width: 150,
+                            margin: 1,
+                            color: {
+                                dark: '#333333',
+                                light: '#FFFFFF'
+                            }
+                        }, function (error) {
+                            if (error) {
+                                console.error('QR Code generation failed:', error);
+                                // Fallback to API-based QR code
+                                qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(gameUrl)}" alt="QR Code" style="border-radius:5px;">`;
+                            }
+                        });
+                    } else {
+                        // Library not loaded, use API fallback
+                        setTimeout(() => {
+                            const qrContainer = document.getElementById('qr-code');
+                            qrContainer.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(gameUrl)}" alt="QR Code" style="border-radius:5px;">`;
+                        }, 1000);
+                    }
+                };
+                
+                generateQR();
+            }
+        }
+
+        // Global functions for HTML onclick handlers
+        let game;
+        
+        function showMainMenu() { game.showScreen('main-menu'); }
+        function showHostScreen() { game.showScreen('host-screen'); }
+        function showJoinScreen() { game.showScreen('join-screen'); }
+        function createRoom() { game.createRoom(); }
+        function joinRoom() { game.joinRoom(); }
+        function startGame() { game.startGame(); }
+        function leaveRoom() { game.leaveRoom(); }
+        function showResults() { game.showResults(); }
+        function newRound() { game.newRound(); }
+        function backToLobby() { game.backToLobby(); }
+        
+        function revealRole() {
+            // Player has seen their role, notify server
+            game.sendMessage({
+                type: 'role_revealed'
+            });
+            
+            // Hide the reveal button
+            const button = event.target;
+            button.style.display = 'none';
+            
+            // Show confirmation
+            const confirmation = document.createElement('div');
+            confirmation.style.marginTop = '1rem';
+            confirmation.style.padding = '0.8rem';
+            confirmation.style.background = 'rgba(255,255,255,0.9)';
+            confirmation.style.color = '#333333';
+            confirmation.style.borderRadius = '10px';
+            confirmation.style.fontWeight = 'bold';
+            confirmation.innerHTML = '✅ Role confirmed! Waiting for other players...';
+            button.parentNode.appendChild(confirmation);
+        }
+
+        function backToLobby() {
+            game.gameState.phase = 'lobby';
+            game.updateLobbyDisplay();
+            game.showScreen('lobby-screen');
+        }
+
+        // Initialize game when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            game = new MultiplayerImpostorGame();
+            
+            // Check if there's a room code in URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomCode = urlParams.get('room');
+            if (roomCode && roomCode.length === 4) {
+                // Auto-fill the room code in join screen
+                document.getElementById('room-code-input').value = roomCode.toUpperCase();
+                // Show join screen directly
+                game.showScreen('join-screen');
+            }
+        });
+    </script>
+</body>
+</html>
